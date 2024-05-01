@@ -1,0 +1,15 @@
+loss : "BCE loss"
+architecture: "U-net"
+sweep: 0
+
+#training
+learning_rate: 0.0001
+batch_size: 1
+epochs: 10
+
+#Turn WandB on and off
+W: 1
+
+# data
+dataset : "brats"
+image_size: 64

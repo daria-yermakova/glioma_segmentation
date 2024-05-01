@@ -1,0 +1,154 @@
+from pathlib import Path
+import SimpleITK as sitk
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+from monai.transforms import RandAffined
+
+# resample image - sitk.BSpline as interpolator
+def resample_image(img, size=[256, 256, 155]):
+    identity = sitk.Transform(3, sitk.sitkIdentity)
+    # compute new spacing
+    new_spacing2 = (img.GetSize()[2] / size[2]) * img.GetSpacing()[2]
+    new_spacing1 = (img.GetSize()[1] / size[1]) * img.GetSpacing()[1]
+    new_spacing0 = (img.GetSize()[0] / size[0]) * img.GetSpacing()[0]
+    spacing = (new_spacing0, new_spacing1, new_spacing2)
+    origin = img.GetOrigin()
+    direction = img.GetDirection()
+    return sitk.Resample(
+        img, size, identity, sitk.sitkBSpline, origin, spacing, direction
+    )
+
+# resample label - sitk.sitkNearestNeighbor as interpolator
+def resample_label(img, size=[256, 256, 155]):
+    # print("og spacing", img.GetSpacing())
+    identity = sitk.Transform(3, sitk.sitkIdentity)
+    # compute new spacing
+    new_spacing2 = (img.GetSize()[2] / size[2]) * img.GetSpacing()[2]
+    new_spacing1 = (img.GetSize()[1] / size[1]) * img.GetSpacing()[1]
+    new_spacing0 = (img.GetSize()[0] / size[0]) * img.GetSpacing()[0]
+    spacing = (new_spacing0, new_spacing1, new_spacing2)
+    origin = img.GetOrigin()
+    direction = img.GetDirection()
+    return sitk.Resample(
+        img, size, identity, sitk.sitkNearestNeighbor, origin, spacing, direction
+    )
+
+affine = RandAffined(
+    keys=['image', 'label'],
+    prob=1.0,
+    translate_range = (10, 20, 2),
+    rotate_range = (np.pi/36, np.pi/36, np.pi/4),
+    scale_range = (0, 0.05, 0.15),
+    padding_mode = 'border',
+)
+
+class BRATS(Dataset):
+    def __init__(
+        self,
+        path,
+        mode="train",
+        subset=0.05,
+        images=["flair", "t1", "t1ce", "t2"],
+        size=[64, 64, 155],
+        channels=4
+    ):
+        if path is None:
+            RuntimeWarning("Dataset path is not set!")
+        self.Path = Path(path)
+        self.curPath = Path(path)
+        self.imgmodes = images
+        self.hgg = list(self.Path.glob(f"HGG/*{size[0]}.npy"))
+        self.lgg = list(self.Path.glob(f"LGG/*{size[0]}.npy"))
+
+        self.data = []
+
+        subset_hgg = int(self.hgg.__len__() * subset)
+        subset_lgg = int(self.lgg.__len__() * subset)
+        subset_hgg_val = int(self.hgg.__len__() * min(subset + 0.1, 1.0))
+        subset_lgg_val = int(self.lgg.__len__() * min(subset + 0.1, 1.0))
+
+        if mode == "train":
+            self.data = self.hgg[:subset_hgg] + self.lgg[:subset_lgg]
+        elif mode == "test":
+            self.data = self.hgg[subset_hgg_val:] + self.lgg[subset_lgg_val:]
+        elif mode == "val":
+            self.data = (self.hgg[subset_hgg:subset_hgg_val] + self.lgg[subset_lgg:subset_lgg_val])
+        elif mode == "convert":
+            for folder in ["HGG", "LGG"]:
+                self.flairimgs = list(self.Path.glob(folder + "/*/*flair.nii.gz"))
+                self.t1imgs = list(self.Path.glob(folder + "/*/*t1.nii.gz"))
+                self.t1ceimgs = list(self.Path.glob(folder + "/*/*t1ce.nii.gz"))
+                self.t2imgs = list(self.Path.glob(folder + "/*/*t2.nii.gz"))
+                self.labels = list(self.Path.glob(folder + "/*/*seg.nii.gz"))
+                assert len(self.flairimgs) == len(self.labels)
+
+                self.img = [self.flairimgs, self.t1imgs, self.t1ceimgs, self.t2imgs]
+                self.mask = self.labels
+                for index in range(0, len(self.labels)):
+                    img = []
+                    savefile = self.img[0][index].parent.absolute().__str__()
+                    for i in range(len(self.img)):
+                        tmp = sitk.ReadImage(self.img[i][index].absolute().__str__())
+                        tmp = resample_image(tmp, size=size)
+                        tmp = sitk.GetArrayFromImage(tmp)
+                        img.append(tmp)
+                    label = sitk.ReadImage(self.labels[index].absolute().__str__())
+                    label = resample_label(label, size=size)
+
+                    img.append(sitk.GetArrayFromImage(label))
+                    img = np.stack(img)
+
+                    self.data.append(img)
+                    np.save(f"{savefile}_{size[0]}", img)
+
+        else:
+            print("Please use 'train','test','val' or 'convert' as mode")
+            return False
+
+    def __len__(self):
+        return self.data.__len__() * 155
+
+    def __getitem__(self, item):
+        data = np.load(self.data[item // 155].absolute().__str__())
+
+        img = torch.from_numpy(data[:4, item % 155])# [4, 64, 64]
+        mask = torch.from_numpy(data[-1, item % 155])# [1, 64, 64]
+        # print('dataloader tensors shape', img.shape, mask.shape)
+        mask[4 == mask] = 3
+        img = img.float()
+        mask = mask.float()
+        mask[mask > 0] = 1.0
+        mask = torch.unsqueeze(mask, dim=0)
+        # print('111', mask.sum(), len(np.unique(mask)) == 2 and np.all(np.unique(mask) == [0, 1]), type(mask[0, 1, 1]),mask.dtype)
+
+        # print('222', transformed_mask.sum(), len(np.unique(transformed_mask)) == 2 and np.all(np.unique(transformed_mask) == [0, 1]),
+        #       np.max(transformed_mask.data), np.min(transformed_mask.data), transformed_mask.dtype)
+
+        # print('333', transformed_mask.sum(),
+        #       len(np.unique(transformed_mask)) == 2 and np.all(np.unique(transformed_mask) == [0, 1]), transformed_mask.dtype)
+
+        transformed_data = affine({"image": img.unsqueeze(0), "label": mask.unsqueeze(0)})
+
+        transformed_image = transformed_data["image"]
+        transformed_mask = transformed_data["label"]
+
+        transformed_image = transformed_image.squeeze(0)
+        transformed_mask = transformed_mask.squeeze(0)
+
+        transformed_mask = transformed_mask[1:2, :, :]
+
+        transformed_mask = (transformed_mask > 0.5).to(torch.float32)#.astype(torch.uint8)
+
+        return transformed_image, transformed_mask, [transformed_mask]
+
+        # return img, mask, [mask]
+
+if __name__ == "__main__":
+
+    d = BRATS(
+        path='../../../../special-course/data/BRATS_20_images',
+        subset=0.6,
+        mode="train",
+    )
+    print(len(d))
