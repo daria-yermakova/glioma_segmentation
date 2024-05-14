@@ -29,9 +29,38 @@ def IoU(target, predicted_mask):
     # true_n = (torch.logical_and(target == 0, predicted_mask == 0)).sum().item() #Currently not needed for IoU
     false_p = (torch.logical_and(target == 0, predicted_mask == 1)).sum()
     false_n = (torch.logical_and(target == 1, predicted_mask == 0)).sum()
+
     sample_IoU = (smooth+float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
+    sample_IoU2 = (float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
+
+    print(f'iou - tp={true_p} fp={false_p} fn={false_n} iou1={sample_IoU} iou2={sample_IoU2}')
 
     return sample_IoU
+
+def IoU2(target, predicted_mask):
+    """
+    Args:
+        target: (torch.tensor (batchxCxHxW)) Binary Target Segmentation from training set
+        predicted_mask: (torch.tensor (batchxCxHxW)) Predicted Segmentation Mask
+
+    Returns:
+        IoU: (Float) Average IoUs over Batch
+    """
+
+    target = target.detach()
+    predicted_mask = predicted_mask.detach()
+    smooth = 1e-8
+    true_p = (torch.logical_and(target == 1, predicted_mask == 1)).sum()
+    # true_n = (torch.logical_and(target == 0, predicted_mask == 0)).sum().item() #Currently not needed for IoU
+    false_p = (torch.logical_and(target == 0, predicted_mask == 1)).sum()
+    false_n = (torch.logical_and(target == 1, predicted_mask == 0)).sum()
+
+    sample_IoU = (smooth+float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
+    sample_IoU2 = (float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
+
+    print(f'iou - tp={true_p} fp={false_p} fn={false_n} iou1={sample_IoU} iou2={sample_IoU2}')
+
+    return sample_IoU2
 
 def compute_average_pos_weight(train_loader):
     """

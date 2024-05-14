@@ -20,7 +20,7 @@ from src.models.unet import UNet
 from src.utils import IoU, get_device
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', default='brats', help="Available [isic, brats]. Default is isic.")
+parser.add_argument('--dataset', default='brats')
 
 def train(model, epochs, opt, train_loader, val_loader, training_run_name, device):
     path = f'res-{training_run_name}'
@@ -29,6 +29,7 @@ def train(model, epochs, opt, train_loader, val_loader, training_run_name, devic
         os.makedirs(os.path.join(path, 'img'))
         os.makedirs(os.path.join(path, 'target'))
         os.makedirs(os.path.join(path, 'pred'))
+        os.makedirs(os.path.join(path, 'models'))
 
     # Log model to wandb
     if W and (not is_sweep):
@@ -46,22 +47,27 @@ def train(model, epochs, opt, train_loader, val_loader, training_run_name, devic
 
             criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(0.0115))
             loss = criterion(logits, targets)
-            # loss = loss_function(logits, targets)
 
             loss.backward()
             opt.step()
 
             train_loss += float(loss)
             train_iou += float(IoU(targets.detach(), torch.sigmoid(logits.detach()).ge(0.5)))
-
+            torch.save(model.state_dict(), f"{path}/models/model_{epoch}.pth")
             if W:
                 wandb.log({"training_loss": train_loss / (len(train_loader)),
                            "training_iou": train_iou / (len(train_loader))}, step=epoch)
             if index == 2 and (not is_sweep):
                 for batch_index in range(0, len(inputs)):
                     np_img = inputs.cpu().numpy()
-                    np_target = targets.cpu().numpy()
-                    np_pred = logits.cpu().detach().numpy()
+                    np_target = targets.cpu().detach().numpy()
+                    np_pred = torch.sigmoid(logits.detach()).ge(0.5).cpu().detach().numpy()
+                    print('inputs', np_img.sum(), np.sum(np_img), len(np.unique(np_img)) <= 2)
+                    print('target', np_target.sum(), np.sum(np_target), len(np.unique(np_target)) <= 2)
+                    print('pred', np_pred.sum(), np.sum(np_pred), len(np.unique(np_pred)) <= 2)
+                    matched_pixels = np.where((np_target > 0) & (np_pred > 0.5), 1, 0)
+                    print('matched_pixels', matched_pixels.sum(), np.sum(matched_pixels),  len(np.unique(matched_pixels)) <= 2)
+
                     np.save(f"{path}/img/img_e{epoch}_b{batch_index}.npy", np_img)
                     np.save(f"{path}/target/target_e{epoch}_b{batch_index}.npy", np_target)
                     np.save(f"{path}/pred/pred_e{epoch}_b{batch_index}.npy", np_pred)
@@ -74,12 +80,10 @@ def train(model, epochs, opt, train_loader, val_loader, training_run_name, devic
                 val_inputs, val_targets = inputs.to(device), targets.to(device)
                 val_logits = model(val_inputs)
 
-                # loss = loss_function(val_logits, val_targets)
-                criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(0.0115))
+                criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(0.0093))
                 loss = criterion(val_logits, val_targets)
 
                 val_loss += loss.detach().item()
-                # val_loss += float(loss)
                 val_iou += IoU(val_targets.detach(), torch.sigmoid(val_logits.detach()).ge(0.5))
         if W:
             wandb.log({"validation_loss": val_loss / len(val_loader),
@@ -126,12 +130,8 @@ if __name__ == '__main__':
 
     opt = torch.optim.AdamW(unet.parameters(), lr=learning_rate)
     # Load Data
-    train_set = BRATS('../../../../special-course/data/BRATS_20_images', mode="train", subset=0.6, size=[img_size, img_size, 155])
-    valid_set = BRATS('../../../../special-course/data/BRATS_20_images', mode='val', subset=0.6, size=[img_size, img_size, 155])
-
-    # train_set = BRATS('src/BRATS_full_slices', mode="train", subset=0.6, size=[img_size, img_size, 155])
-    # valid_set = BRATS('src/BRATS_full_slices', mode='val', subset=0.6, size=[img_size, img_size, 155])
-
+    train_set = BRATS('src/BRATS_full_slices', mode="train", subset=0.6, size=[img_size, img_size, 155])
+    valid_set = BRATS('src/BRATS_full_slices', mode='val', subset=0.6, size=[img_size, img_size, 155])
 
     train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last=True)
     valid_dataloader = torch.utils.data.DataLoader(valid_set, batch_size=batch_size, shuffle=False, drop_last=False)
