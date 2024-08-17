@@ -16,7 +16,7 @@ sys.path.append(root_dir)
 # -- for cluster --
 from src.models.ensemble import Ensemble
 from src.dataloaders.brats import BRATS
-from src.models.unet import UNet
+from src.models.unet_dropout import UNet
 from src.utils import IoU, get_device
 
 parser = argparse.ArgumentParser()
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     for i in range(ensemble_size):
         # Initialize  U-Net
         cur_name = f'training_run_name_{i}'
-        unet = UNet(cur_name).to(device)
+        unet = UNet().to(device)
         opt = torch.optim.AdamW(unet.parameters(), lr=learning_rate)
         trained_model = train(unet, epochs, opt, train_dataloader, valid_dataloader, cur_name, device, i)
         torch.save(trained_model.state_dict(), f'res-{training_run_name}/trained_model_{i}.pth')

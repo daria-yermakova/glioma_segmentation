@@ -32,8 +32,6 @@ class UNet(torch.nn.Module):  # creates instance of Base class for all neural ne
         self.convtrans34 = torch.nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=2, stride=2)  # stride - step
         self.convtrans45 = torch.nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=2, stride=2)
 
-        self.dropout = torch.nn.Dropout2d(p=dropout_prob)
-
         # Convenience
         self.relu = torch.nn.ReLU()
         self.pool = torch.nn.MaxPool2d(2, 2)

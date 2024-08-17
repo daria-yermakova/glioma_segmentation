@@ -60,8 +60,16 @@ class BRATS(Dataset):
 
         if mode == "train":
             self.data = self.hgg[:subset_hgg] + self.lgg[:subset_lgg]
+        elif mode == "train-hgg":
+            self.data = self.hgg[:subset_hgg]
+        elif mode == "train-lgg":
+            self.data = self.lgg[:subset_lgg]
         elif mode == "test":
             self.data = self.hgg[subset_hgg_val:] + self.lgg[subset_lgg_val:]
+        elif mode == "test-hgg":
+            self.data = self.hgg[subset_hgg_val:]
+        elif mode == "test-lgg":
+            self.data = self.lgg[subset_lgg_val:]
         elif mode == "val":
             self.data = (self.hgg[subset_hgg:subset_hgg_val] + self.lgg[subset_lgg:subset_lgg_val])
         elif mode == "convert":
@@ -101,7 +109,6 @@ class BRATS(Dataset):
         data = np.load(self.data[item // 155].absolute().__str__())
         img = torch.from_numpy(data[:4, item % 155])# [4, 64, 64]
         mask = torch.from_numpy(data[-1, item % 155])# [1, 64, 64]
-        # print('dataloader tensors shape', img.shape, mask.shape)
         mask[4 == mask] = 3
         img = img.float()
         mask = mask.float()

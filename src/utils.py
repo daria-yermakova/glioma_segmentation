@@ -29,12 +29,8 @@ def IoU(target, predicted_mask):
     # true_n = (torch.logical_and(target == 0, predicted_mask == 0)).sum().item() #Currently not needed for IoU
     false_p = (torch.logical_and(target == 0, predicted_mask == 1)).sum()
     false_n = (torch.logical_and(target == 1, predicted_mask == 0)).sum()
-
     sample_IoU = (smooth+float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
-    sample_IoU2 = (float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
-
-    print(f'iou - tp={true_p} fp={false_p} fn={false_n} iou1={sample_IoU} iou2={sample_IoU2}')
-
+    # print(f'target{target.sum()}, pred{predicted_mask.sum()} tp{true_p} fp{false_p} fn{false_n} iou{sample_IoU}')
     return sample_IoU
 
 def IoU2(target, predicted_mask):
@@ -58,7 +54,7 @@ def IoU2(target, predicted_mask):
     sample_IoU = (smooth+float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
     sample_IoU2 = (float(true_p))/(float(true_p) + float(false_p)+float(false_n)+smooth)
 
-    print(f'iou - tp={true_p} fp={false_p} fn={false_n} iou1={sample_IoU} iou2={sample_IoU2}')
+    # print(f'iou - tp={true_p} fp={false_p} fn={false_n} iou1={sample_IoU} iou2={sample_IoU2}')
 
     return sample_IoU2
 

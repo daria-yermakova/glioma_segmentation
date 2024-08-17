@@ -70,6 +70,16 @@ class BRATS(Dataset):
 
         if mode == "train":
             self.data = self.hgg[:subset_hgg] + self.lgg[:subset_lgg]
+        elif mode == "train-hgg":
+            self.data = self.hgg[:subset_hgg]
+        elif mode == "train-lgg":
+            self.data = self.lgg[:subset_lgg]
+        elif mode == "test":
+            self.data = self.hgg[subset_hgg_val:] + self.lgg[subset_lgg_val:]
+        elif mode == "test-hgg":
+            self.data = self.hgg[subset_hgg_val:]
+        elif mode == "test-lgg":
+            self.data = self.lgg[subset_lgg_val:]
         elif mode == "test":
             self.data = self.hgg[subset_hgg_val:] + self.lgg[subset_lgg_val:]
         elif mode == "val":
@@ -117,28 +127,19 @@ class BRATS(Dataset):
 
         img = torch.from_numpy(data[:4, item % 155])# [4, 64, 64]
         mask = torch.from_numpy(data[-1, item % 155])# [1, 64, 64]
-        # print('dataloader tensors shape', img.shape, mask.shape)
         mask[4 == mask] = 3
         img = img.float()
         mask = mask.float()
         mask[mask > 0] = 1.0
         mask = torch.unsqueeze(mask, dim=0)
-        print('111', mask.sum(), len(np.unique(mask)) == 2 and np.all(np.unique(mask) == [0, 1]), type(mask[0, 1, 1]),mask.dtype)
         transformed_data_dict = elastic({'image': img.unsqueeze(0), 'label': mask.unsqueeze(0)})
 
         transformed_img, transformed_mask = transformed_data_dict['image'], transformed_data_dict['label']
         transformed_img = transformed_img.squeeze(0)
         transformed_mask = transformed_mask.squeeze(0)
         transformed_mask = transformed_mask[1:2, :, :]
-        print('222', transformed_mask.sum(),
-        len(np.unique(transformed_mask)) == 2 and np.all(np.unique(transformed_mask) == [0, 1]),
-        np.max(transformed_mask.data), np.min(transformed_mask.data), transformed_mask.dtype)
 
         transformed_mask = (transformed_mask > 0.5).to(torch.float32)#.astype(torch.uint8)
-
-        print('333', transformed_mask.sum(),
-              len(np.unique(transformed_mask)) == 2 and np.all(np.unique(transformed_mask) == [0, 1]), transformed_mask.dtype)
-
         return transformed_img, transformed_mask, [transformed_mask]
 
 if __name__ == "__main__":
